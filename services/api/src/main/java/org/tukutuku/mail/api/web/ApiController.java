@@ -28,18 +28,20 @@ public class ApiController {
     @PostMapping("/mail/send") public ResponseEntity<Void> send(@RequestHeader("Authorization") String auth,@Valid @RequestBody SendRequest r){ var c=sessions.require(token(auth)); engine.send(c.address(),c.password(),new OutgoingMessage(r.to(),r.cc(),r.subject(),r.body())); return ResponseEntity.accepted().build(); }
 
     @PostMapping("/organizations") public Organization createOrg(@RequestHeader("X-Tuku-Provisioning-Key") String key,@Valid @RequestBody OrgRequest r){ requireKey(key); return provisioning.createOrganization(r.name(),r.slug(),r.plan(),r.mailboxLimit(),r.storageLimitGb()); }
-    @PostMapping("/organizations/{orgId}/domains") public MailDomain addDomain(@RequestHeader("X-Tuku-Provisioning-Key") String key,@PathVariable UUID orgId,@Valid @RequestBody DomainRequest r){ requireKey(key); return provisioning.addDomain(orgId,r.domain(),r.verified()); }
+    @PostMapping("/organizations/{orgId}/domains") public MailDomain addDomain(@RequestHeader("X-Tuku-Provisioning-Key") String key,@PathVariable UUID orgId,@Valid @RequestBody DomainRequest r){ requireKey(key); return provisioning.addDomain(orgId,r.domain()); }
+    @GetMapping("/organizations/{orgId}/domains") public List<MailDomain> listDomains(@RequestHeader("X-Tuku-Provisioning-Key") String key,@PathVariable UUID orgId){ requireKey(key); return provisioning.listDomains(orgId); }
+    @PostMapping("/organizations/{orgId}/domains/{domainId}/verify") public MailDomain verifyDomain(@RequestHeader("X-Tuku-Provisioning-Key") String key,@PathVariable UUID orgId,@PathVariable UUID domainId){ requireKey(key); return provisioning.verifyDomain(orgId,domainId); }
     @PostMapping("/organizations/{orgId}/mailboxes") public MailboxResponse createMailbox(@RequestHeader("X-Tuku-Provisioning-Key") String key,@PathVariable UUID orgId,@Valid @RequestBody MailboxRequest r){ requireKey(key); var c=provisioning.createMailbox(orgId,r.localPart(),r.domain(),r.displayName(),r.quotaGb(),r.staffRef()); return new MailboxResponse(c.mailbox(),c.temporaryPassword()); }
     @GetMapping("/organizations/{orgId}/mailboxes") public List<Mailbox> listMailboxes(@RequestHeader("X-Tuku-Provisioning-Key") String key,@PathVariable UUID orgId){ requireKey(key); return provisioning.list(orgId); }
     @PostMapping("/mailboxes/{id}/suspend") public Mailbox suspend(@RequestHeader("X-Tuku-Provisioning-Key") String key,@PathVariable UUID id){ requireKey(key); return provisioning.suspend(id); }
 
-    private void requireKey(String value){ if(!java.security.MessageDigest.isEqual(provisioningKey.getBytes(),value.getBytes()))throw new IllegalArgumentException("Invalid provisioning key"); }
+    private void requireKey(String value){ if(value==null||!java.security.MessageDigest.isEqual(provisioningKey.getBytes(),value.getBytes()))throw new IllegalArgumentException("Invalid provisioning key"); }
     private static String token(String auth){ if(auth==null||!auth.startsWith("Bearer "))throw new IllegalArgumentException("Missing session"); return auth.substring(7); }
     public record LoginRequest(@Email String email,@NotBlank String password){}
     public record SessionResponse(String token,String email){}
     public record SendRequest(@NotEmpty List<@Email String> to,List<@Email String> cc,@NotBlank @Size(max=998) String subject,@NotNull @Size(max=2_000_000) String body){}
     public record OrgRequest(@NotBlank String name,@Pattern(regexp="[a-z0-9-]{2,64}") String slug,@NotBlank String plan,@Min(1) int mailboxLimit,@Min(1) int storageLimitGb){}
-    public record DomainRequest(@NotBlank String domain,boolean verified){}
+    public record DomainRequest(@NotBlank String domain){}
     public record MailboxRequest(@NotBlank String localPart,@NotBlank String domain,@NotBlank String displayName,@Min(1) @Max(100) int quotaGb,String staffRef){}
     public record MailboxResponse(Mailbox mailbox,String temporaryPassword){}
 }
