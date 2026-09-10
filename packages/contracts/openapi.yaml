@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: TukuMail API
-  version: 0.1.0
+  version: 0.2.0
   description: Tuku-owned control-plane and mail-client API.
 servers:
   - url: https://mail.tukutuku.org/api/v1
@@ -70,6 +70,26 @@ paths:
       responses:
         '200': { description: Organisation created }
   /organizations/{organizationId}/domains:
+    parameters:
+      - in: path
+        name: organizationId
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      security: [{ provisioningKey: [] }]
+      responses:
+        '200': { description: Registered domains and verification state }
+    post:
+      security: [{ provisioningKey: [] }]
+      summary: Register a domain and issue its DNS TXT ownership challenge
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DomainRequest' }
+      responses:
+        '200': { description: Domain registered; publish the returned verificationToken at _tukumail-verification.<domain> }
+  /organizations/{organizationId}/domains/{domainId}/verify:
     post:
       security: [{ provisioningKey: [] }]
       parameters:
@@ -77,8 +97,13 @@ paths:
           name: organizationId
           required: true
           schema: { type: string, format: uuid }
+        - in: path
+          name: domainId
+          required: true
+          schema: { type: string, format: uuid }
       responses:
-        '200': { description: Domain registered }
+        '200': { description: DNS ownership verified and domain activated in the mail engine }
+        '409': { description: Verification TXT record is not visible yet }
   /organizations/{organizationId}/mailboxes:
     get:
       security: [{ provisioningKey: [] }]
@@ -120,6 +145,11 @@ components:
       properties:
         token: { type: string }
         email: { type: string, format: email }
+    DomainRequest:
+      type: object
+      required: [domain]
+      properties:
+        domain: { type: string, maxLength: 253 }
     MessageSummary:
       type: object
       required: [id, from, subject, preview, receivedAt, read]
