@@ -7,6 +7,7 @@ import org.tukutuku.mail.api.repo.*;
 import org.tukutuku.mail.engine.*;
 
 import java.security.SecureRandom;
+import java.time.Instant;
 import java.util.*;
 
 @Service
@@ -15,13 +16,15 @@ public class ProvisioningService {
     private final MailDomainRepository domains;
     private final MailboxRepository mailboxes;
     private final MailEngine engine;
+    private final DnsVerificationService dnsVerification;
     private static final SecureRandom RANDOM = new SecureRandom();
 
-    public ProvisioningService(OrganizationRepository organizations, MailDomainRepository domains, MailboxRepository mailboxes, MailEngine engine) {
+    public ProvisioningService(OrganizationRepository organizations, MailDomainRepository domains, MailboxRepository mailboxes, MailEngine engine, DnsVerificationService dnsVerification) {
         this.organizations = organizations;
         this.domains = domains;
         this.mailboxes = mailboxes;
         this.engine = engine;
+        this.dnsVerification = dnsVerification;
     }
 
     @Transactional
@@ -30,14 +33,31 @@ public class ProvisioningService {
     }
 
     @Transactional
-    public MailDomain addDomain(UUID orgId, String rawDomain, boolean verified) {
+    public MailDomain addDomain(UUID orgId, String rawDomain) {
         requireOrg(orgId);
-        String domain = rawDomain.trim().toLowerCase(Locale.ROOT);
-        if (!domain.matches("(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}")) {
-            throw new IllegalArgumentException("Invalid domain");
+        String domain = normalizeDomain(rawDomain);
+        if (domains.findByNameIgnoreCase(domain).isPresent()) throw new IllegalStateException("Domain already registered");
+        return domains.save(new MailDomain(orgId, domain, randomToken()));
+    }
+
+    @Transactional
+    public MailDomain verifyDomain(UUID orgId, UUID domainId) {
+        requireOrg(orgId);
+        MailDomain domain = domains.findById(domainId).orElseThrow(() -> new IllegalArgumentException("Domain not found"));
+        if (!domain.organizationId.equals(orgId)) throw new IllegalArgumentException("Domain not found");
+        if (domain.verified) return domain;
+        if (!dnsVerification.verifies(domain.name, domain.verificationToken)) {
+            throw new IllegalStateException("DNS verification record not found");
         }
-        if (verified) engine.ensureDomain(domain);
-        return domains.save(new MailDomain(orgId, domain, verified));
+        engine.ensureDomain(domain.name);
+        domain.verified = true;
+        domain.verifiedAt = Instant.now();
+        return domains.save(domain);
+    }
+
+    public List<MailDomain> listDomains(UUID orgId) {
+        requireOrg(orgId);
+        return domains.findByOrganizationId(orgId);
     }
 
     @Transactional
@@ -85,6 +105,20 @@ public class ProvisioningService {
     private Organization requireOrg(UUID id) {
         return organizations.findById(id).filter(o -> o.active)
             .orElseThrow(() -> new IllegalArgumentException("Organisation not found"));
+    }
+
+    private static String normalizeDomain(String rawDomain) {
+        String domain = rawDomain.trim().toLowerCase(Locale.ROOT);
+        if (!domain.matches("(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}")) {
+            throw new IllegalArgumentException("Invalid domain");
+        }
+        return domain;
+    }
+
+    private static String randomToken() {
+        byte[] bytes = new byte[24];
+        RANDOM.nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
     private char[] temporaryPassword() {
