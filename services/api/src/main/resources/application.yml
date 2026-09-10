@@ -1,0 +1,29 @@
+server:
+  port: ${PORT:8080}
+  forward-headers-strategy: framework
+spring:
+  datasource:
+    url: ${DATABASE_URL:jdbc:h2:mem:tukumail;MODE=PostgreSQL;DB_CLOSE_DELAY=-1}
+    username: ${DATABASE_USER:sa}
+    password: ${DATABASE_PASSWORD:}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+tukumail:
+  provisioning-key: ${TUKUMAIL_PROVISIONING_KEY:dev-only-change-me}
+  cors-origin: ${TUKUMAIL_CORS_ORIGIN:http://localhost:5173}
+  engine:
+    webadmin: ${TUKUMAIL_JAMES_WEBADMIN:http://localhost:8000}
+    imap-host: ${TUKUMAIL_IMAP_HOST:localhost}
+    imap-port: ${TUKUMAIL_IMAP_PORT:993}
+    smtp-host: ${TUKUMAIL_SMTP_HOST:localhost}
+    smtp-port: ${TUKUMAIL_SMTP_PORT:465}
