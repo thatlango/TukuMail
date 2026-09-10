@@ -60,3 +60,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: bash scripts/validate-prod.sh
+      - run: docker build -f infrastructure/james/Dockerfile -t tukumail-james-ci .
