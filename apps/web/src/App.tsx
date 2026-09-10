@@ -15,7 +15,7 @@ export default function App(){
  async function open(m:MessageSummary){if(!session)return;setLoading(true);try{setSelected(await mailApi.message(session.token,m.id))}catch(e){setError((e as Error).message)}finally{setLoading(false)}}
  const visible=useMemo(()=>{const q=query.toLowerCase().trim();return q?messages.filter(m=>(m.from+' '+m.subject+' '+m.preview).toLowerCase().includes(q)):messages},[messages,query]);
  if(!session)return <Login onLogin={s=>{sessionStorage.setItem('tukumail-session',JSON.stringify(s));setSession(s)}}/>;
- async function signOut(){try{await mailApi.logout(session.token)}catch{}sessionStorage.removeItem('tukumail-session');setSession(null)}
+ async function signOut(){const currentToken=session?.token;if(currentToken){try{await mailApi.logout(currentToken)}catch{}}sessionStorage.removeItem('tukumail-session');setSession(null)}
  return <div className="app-shell">
    <aside className="rail">
     <div className="brand-mark" aria-label="TukuMail">T</div>
