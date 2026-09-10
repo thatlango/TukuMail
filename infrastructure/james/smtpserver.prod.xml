@@ -1,0 +1,85 @@
+<?xml version="1.0"?>
+<!-- Derived from Apache James 3.9.0 sample configuration, Apache License 2.0. -->
+<smtpservers>
+  <smtpserver enabled="true">
+    <jmxName>tukumail-smtp-mx</jmxName>
+    <bind>0.0.0.0:25</bind>
+    <connectionBacklog>200</connectionBacklog>
+    <tls socketTLS="false" startTLS="true">
+      <privateKey>file:///root/tls/privkey.pem</privateKey>
+      <certificates>file:///root/tls/fullchain.pem</certificates>
+    </tls>
+    <connectiontimeout>360</connectiontimeout>
+    <connectionLimit>0</connectionLimit>
+    <connectionLimitPerIP>20</connectionLimitPerIP>
+    <auth>
+      <announce>never</announce>
+      <requireSSL>false</requireSSL>
+      <plainAuthEnabled>false</plainAuthEnabled>
+    </auth>
+    <authorizedAddresses>127.0.0.0/8</authorizedAddresses>
+    <verifyIdentity>true</verifyIdentity>
+    <maxmessagesize>52428800</maxmessagesize>
+    <addressBracketsEnforcement>true</addressBracketsEnforcement>
+    <smtpGreeting>TukuMail ESMTP</smtpGreeting>
+    <handlerchain coreHandlersPackage="org.apache.james.smtpserver.NoAuthCmdHandlerLoader">
+      <handler class="org.apache.james.smtpserver.fastfail.ValidRcptHandler"/>
+    </handlerchain>
+  </smtpserver>
+
+  <smtpserver enabled="true">
+    <jmxName>tukumail-smtps</jmxName>
+    <bind>0.0.0.0:465</bind>
+    <connectionBacklog>200</connectionBacklog>
+    <tls socketTLS="true" startTLS="false">
+      <privateKey>file:///root/tls/privkey.pem</privateKey>
+      <certificates>file:///root/tls/fullchain.pem</certificates>
+    </tls>
+    <connectiontimeout>360</connectiontimeout>
+    <connectionLimit>0</connectionLimit>
+    <connectionLimitPerIP>10</connectionLimitPerIP>
+    <auth>
+      <announce>forUnauthorizedAddresses</announce>
+      <requireSSL>true</requireSSL>
+      <plainAuthEnabled>true</plainAuthEnabled>
+      <required>true</required>
+    </auth>
+    <authorizedAddresses>127.0.0.0/8</authorizedAddresses>
+    <verifyIdentity>true</verifyIdentity>
+    <maxmessagesize>52428800</maxmessagesize>
+    <addressBracketsEnforcement>true</addressBracketsEnforcement>
+    <smtpGreeting>TukuMail ESMTP</smtpGreeting>
+    <handlerchain>
+      <handler class="org.apache.james.smtpserver.fastfail.ValidRcptHandler"/>
+      <handler class="org.apache.james.smtpserver.CoreCmdHandlerLoader"/>
+    </handlerchain>
+  </smtpserver>
+
+  <smtpserver enabled="true">
+    <jmxName>tukumail-submission</jmxName>
+    <bind>0.0.0.0:587</bind>
+    <connectionBacklog>200</connectionBacklog>
+    <tls socketTLS="false" startTLS="true">
+      <privateKey>file:///root/tls/privkey.pem</privateKey>
+      <certificates>file:///root/tls/fullchain.pem</certificates>
+    </tls>
+    <connectiontimeout>360</connectiontimeout>
+    <connectionLimit>0</connectionLimit>
+    <connectionLimitPerIP>10</connectionLimitPerIP>
+    <auth>
+      <announce>forUnauthorizedAddresses</announce>
+      <requireSSL>true</requireSSL>
+      <plainAuthEnabled>true</plainAuthEnabled>
+      <required>true</required>
+    </auth>
+    <authorizedAddresses>127.0.0.0/8</authorizedAddresses>
+    <verifyIdentity>true</verifyIdentity>
+    <maxmessagesize>52428800</maxmessagesize>
+    <addressBracketsEnforcement>true</addressBracketsEnforcement>
+    <smtpGreeting>TukuMail ESMTP</smtpGreeting>
+    <handlerchain>
+      <handler class="org.apache.james.smtpserver.fastfail.ValidRcptHandler"/>
+      <handler class="org.apache.james.smtpserver.CoreCmdHandlerLoader"/>
+    </handlerchain>
+  </smtpserver>
+</smtpservers>
