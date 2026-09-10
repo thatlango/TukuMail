@@ -56,7 +56,7 @@
     </processor>
 
     <processor state="relay" enableJmx="true">
-      <mailet match="All" class="ConvertTo7Bit"/>
+      <mailet match="All" class="org.apache.james.jdkim.mailets.ConvertTo7Bit"/>
       <mailet match="All" class="org.tukutuku.mail.extensions.MultiDomainDkimSign">
         <selector>tuku1</selector>
         <keyRoot>file:///root/dkim/</keyRoot>
