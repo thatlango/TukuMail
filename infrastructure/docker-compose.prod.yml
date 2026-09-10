@@ -20,7 +20,9 @@ services:
       - ./postgres/01-create-control-db.sh:/docker-entrypoint-initdb.d/01-create-control-db.sh:ro
 
   mail-engine:
-    image: apache/james:postgres-3.9.0
+    build:
+      context: ..
+      dockerfile: infrastructure/james/Dockerfile
     restart: unless-stopped
     hostname: ${TUKUMAIL_HOSTNAME:?set TUKUMAIL_HOSTNAME}
     environment:
@@ -43,7 +45,9 @@ services:
       - ./james/webadmin.prod.properties:/root/conf/webadmin.properties:ro
       - ./james/smtpserver.prod.xml:/root/conf/smtpserver.xml:ro
       - ./james/imapserver.prod.xml:/root/conf/imapserver.xml:ro
+      - ./james/mailetcontainer.prod.xml:/root/conf/mailetcontainer.xml:ro
       - ${TUKUMAIL_TLS_DIR:-/srv/tukumail/tls}:/root/tls:ro
+      - ${TUKUMAIL_DKIM_DIR:-/srv/tukumail/dkim}:/root/dkim:ro
     networks:
       default:
         aliases:
@@ -65,6 +69,10 @@ services:
       TUKUMAIL_IMAP_PORT: 993
       TUKUMAIL_SMTP_HOST: ${TUKUMAIL_HOSTNAME:?set TUKUMAIL_HOSTNAME}
       TUKUMAIL_SMTP_PORT: 465
+      TUKUMAIL_DKIM_DIR: /var/lib/tukumail/dkim
+      TUKUMAIL_DKIM_SELECTOR: tuku1
+    volumes:
+      - ${TUKUMAIL_DKIM_DIR:-/srv/tukumail/dkim}:/var/lib/tukumail/dkim
     depends_on:
       postgres:
         condition: service_healthy
