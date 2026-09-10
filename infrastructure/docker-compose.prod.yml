@@ -42,6 +42,7 @@ services:
     volumes:
       - james-data:/root/var
       - ./james/postgres.prod.properties:/root/conf/postgres.properties:ro
+      - ./james/search.prod.properties:/root/conf/search.properties:ro
       - ./james/webadmin.prod.properties:/root/conf/webadmin.properties:ro
       - ./james/smtpserver.prod.xml:/root/conf/smtpserver.xml:ro
       - ./james/imapserver.prod.xml:/root/conf/imapserver.xml:ro
