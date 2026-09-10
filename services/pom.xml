@@ -5,7 +5,7 @@
   <artifactId>tukumail-services</artifactId>
   <version>0.1.0-SNAPSHOT</version>
   <packaging>pom</packaging>
-  <modules><module>engine</module><module>api</module></modules>
+  <modules><module>engine</module><module>mail-extensions</module><module>api</module></modules>
   <properties>
     <maven.compiler.release>21</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
