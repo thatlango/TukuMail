@@ -1,6 +1,8 @@
 FROM maven:3.9.11-eclipse-temurin-21 AS extensions
 WORKDIR /build
 COPY services/pom.xml services/pom.xml
+COPY services/engine/pom.xml services/engine/pom.xml
+COPY services/api/pom.xml services/api/pom.xml
 COPY services/mail-extensions/pom.xml services/mail-extensions/pom.xml
 RUN mvn -B -f services/pom.xml -pl mail-extensions dependency:go-offline
 COPY services/mail-extensions services/mail-extensions
