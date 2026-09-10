@@ -1,0 +1,86 @@
+name: tukumail
+
+services:
+  postgres:
+    image: postgres:16.9-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${JAMES_DATABASE:-james}
+      POSTGRES_USER: ${POSTGRES_USER:-james}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      CONTROL_DATABASE: ${CONTROL_DATABASE:-tukumail}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-james} -d ${JAMES_DATABASE:-james}"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/01-create-control-db.sh:/docker-entrypoint-initdb.d/01-create-control-db.sh:ro
+
+  mail-engine:
+    image: apache/james:postgres-3.9.0
+    restart: unless-stopped
+    hostname: ${TUKUMAIL_HOSTNAME:?set TUKUMAIL_HOSTNAME}
+    environment:
+      JAMES_DB_NAME: ${JAMES_DATABASE:-james}
+      JAMES_DB_HOST: postgres
+      JAMES_DB_USER: ${POSTGRES_USER:-james}
+      JAMES_DB_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      TUKUMAIL_HOSTNAME: ${TUKUMAIL_HOSTNAME:?set TUKUMAIL_HOSTNAME}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "25:25"
+      - "465:465"
+      - "587:587"
+      - "993:993"
+    volumes:
+      - james-data:/root/var
+      - ./james/postgres.prod.properties:/root/conf/postgres.properties:ro
+      - ./james/webadmin.prod.properties:/root/conf/webadmin.properties:ro
+      - ./james/smtpserver.prod.xml:/root/conf/smtpserver.xml:ro
+      - ./james/imapserver.prod.xml:/root/conf/imapserver.xml:ro
+      - ${TUKUMAIL_TLS_DIR:-/srv/tukumail/tls}:/root/tls:ro
+    networks:
+      default:
+        aliases:
+          - ${TUKUMAIL_HOSTNAME:?set TUKUMAIL_HOSTNAME}
+
+  api:
+    build:
+      context: ..
+      dockerfile: services/api/Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/${CONTROL_DATABASE:-tukumail}
+      DATABASE_USER: ${POSTGRES_USER:-james}
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      TUKUMAIL_PROVISIONING_KEY: ${TUKUMAIL_PROVISIONING_KEY:?set TUKUMAIL_PROVISIONING_KEY}
+      TUKUMAIL_CORS_ORIGIN: https://${TUKUMAIL_HOSTNAME:?set TUKUMAIL_HOSTNAME}
+      TUKUMAIL_JAMES_WEBADMIN: http://mail-engine:8000
+      TUKUMAIL_IMAP_HOST: ${TUKUMAIL_HOSTNAME:?set TUKUMAIL_HOSTNAME}
+      TUKUMAIL_IMAP_PORT: 993
+      TUKUMAIL_SMTP_HOST: ${TUKUMAIL_HOSTNAME:?set TUKUMAIL_HOSTNAME}
+      TUKUMAIL_SMTP_PORT: 465
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mail-engine:
+        condition: service_started
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "127.0.0.1:${TUKUMAIL_WEB_PORT:-8082}:80"
+
+volumes:
+  postgres-data:
+  james-data:
