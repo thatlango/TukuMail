@@ -15,7 +15,6 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-          cache: maven
       - run: mvn -B -f services/pom.xml test
 
   web:
@@ -25,8 +24,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
-          cache-dependency-path: package.json
       - run: npm install
       - run: npm run web:build
 
