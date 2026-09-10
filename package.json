@@ -1,0 +1,12 @@
+{
+  "name": "tukumail",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": ["apps/web", "apps/desktop"],
+  "scripts": {
+    "web:dev": "npm --workspace @tukumail/web run dev",
+    "web:build": "npm --workspace @tukumail/web run build",
+    "desktop:dev": "npm --workspace @tukumail/desktop run tauri dev",
+    "desktop:build": "npm --workspace @tukumail/desktop run tauri build"
+  }
+}
