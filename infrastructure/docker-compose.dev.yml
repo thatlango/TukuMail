@@ -1,0 +1,58 @@
+name: tukumail-dev
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: tukumail
+      POSTGRES_USER: tukumail
+      POSTGRES_PASSWORD: tukumail-dev
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tukumail -d tukumail"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - control-plane-data:/var/lib/postgresql/data
+
+  mail-engine:
+    image: apache/james:demo-3.9.0
+    restart: unless-stopped
+    volumes:
+      - james-data:/root/var
+      - ./james/webadmin.properties:/root/conf/webadmin.properties:ro
+    ports:
+      - "25:25"
+      - "465:465"
+      - "587:587"
+      - "993:993"
+    expose:
+      - "8000"
+
+  api:
+    build:
+      context: ..
+      dockerfile: services/api/Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/tukumail
+      DATABASE_USER: tukumail
+      DATABASE_PASSWORD: tukumail-dev
+      TUKUMAIL_PROVISIONING_KEY: local-development-key-change-me
+      TUKUMAIL_CORS_ORIGIN: http://localhost:5173
+      TUKUMAIL_JAMES_WEBADMIN: http://mail-engine:8000
+      TUKUMAIL_IMAP_HOST: mail-engine
+      TUKUMAIL_IMAP_PORT: 993
+      TUKUMAIL_SMTP_HOST: mail-engine
+      TUKUMAIL_SMTP_PORT: 465
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mail-engine:
+        condition: service_started
+    ports:
+      - "8080:8080"
+
+volumes:
+  control-plane-data:
+  james-data:

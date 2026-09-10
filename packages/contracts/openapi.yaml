@@ -1,0 +1,158 @@
+openapi: 3.1.0
+info:
+  title: TukuMail API
+  version: 0.1.0
+  description: Tuku-owned control-plane and mail-client API.
+servers:
+  - url: https://mail.tukutuku.org/api/v1
+paths:
+  /health:
+    get:
+      responses:
+        '200': { description: Healthy }
+  /auth/session:
+    post:
+      summary: Authenticate a mailbox and issue a short-lived TukuMail session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: Session
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SessionResponse' }
+    delete:
+      security: [{ bearerSession: [] }]
+      responses:
+        '204': { description: Signed out }
+  /mail/inbox:
+    get:
+      security: [{ bearerSession: [] }]
+      responses:
+        '200':
+          description: Inbox summaries
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/MessageSummary' }
+  /mail/messages/{id}:
+    get:
+      security: [{ bearerSession: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Message body
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageDetail' }
+  /mail/send:
+    post:
+      security: [{ bearerSession: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SendRequest' }
+      responses:
+        '202': { description: Accepted for SMTP delivery }
+  /organizations:
+    post:
+      security: [{ provisioningKey: [] }]
+      summary: Create a TukuMail organisation and its mailbox/storage entitlement
+      responses:
+        '200': { description: Organisation created }
+  /organizations/{organizationId}/domains:
+    post:
+      security: [{ provisioningKey: [] }]
+      parameters:
+        - in: path
+          name: organizationId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Domain registered }
+  /organizations/{organizationId}/mailboxes:
+    get:
+      security: [{ provisioningKey: [] }]
+      parameters:
+        - in: path
+          name: organizationId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Mailboxes }
+    post:
+      security: [{ provisioningKey: [] }]
+      parameters:
+        - in: path
+          name: organizationId
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MailboxRequest' }
+      responses:
+        '200': { description: Mailbox and one-time temporary credential }
+components:
+  securitySchemes:
+    bearerSession: { type: http, scheme: bearer }
+    provisioningKey: { type: apiKey, in: header, name: X-Tuku-Provisioning-Key }
+  schemas:
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, format: password }
+    SessionResponse:
+      type: object
+      required: [token, email]
+      properties:
+        token: { type: string }
+        email: { type: string, format: email }
+    MessageSummary:
+      type: object
+      required: [id, from, subject, preview, receivedAt, read]
+      properties:
+        id: { type: string }
+        from: { type: string }
+        subject: { type: string }
+        preview: { type: string }
+        receivedAt: { type: string, format: date-time }
+        read: { type: boolean }
+    MessageDetail:
+      allOf:
+        - $ref: '#/components/schemas/MessageSummary'
+        - type: object
+          required: [to, cc, bodyText]
+          properties:
+            to: { type: array, items: { type: string } }
+            cc: { type: array, items: { type: string } }
+            bodyText: { type: string }
+    SendRequest:
+      type: object
+      required: [to, subject, body]
+      properties:
+        to: { type: array, minItems: 1, items: { type: string, format: email } }
+        cc: { type: array, items: { type: string, format: email } }
+        subject: { type: string, maxLength: 998 }
+        body: { type: string, maxLength: 2000000 }
+    MailboxRequest:
+      type: object
+      required: [localPart, domain, displayName, quotaGb]
+      properties:
+        localPart: { type: string }
+        domain: { type: string }
+        displayName: { type: string }
+        quotaGb: { type: integer, minimum: 1, maximum: 100 }
+        staffRef: { type: [string, 'null'] }
