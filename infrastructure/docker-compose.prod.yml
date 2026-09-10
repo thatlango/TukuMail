@@ -78,6 +78,10 @@ services:
         condition: service_healthy
       mail-engine:
         condition: service_started
+    networks:
+      default:
+        aliases:
+          - tukumail-api
 
   web:
     build:
