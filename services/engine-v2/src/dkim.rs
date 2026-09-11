@@ -5,6 +5,7 @@ use mail_auth::{
     common::crypto::{RsaKey, Sha256},
     dkim::DkimSigner,
 };
+use rustls_pki_types::{PrivateKeyDer, pem::PemObject};
 
 use crate::db;
 
@@ -36,9 +37,11 @@ pub fn sign_if_configured(
         return Ok(raw_message.to_vec());
     }
 
-    let pem = fs::read_to_string(&path)
+    let pem = fs::read(&path)
         .with_context(|| format!("read DKIM key {}", path.display()))?;
-    let key = RsaKey::<Sha256>::from_pkcs1_pem(&pem)
+    let private_key = PrivateKeyDer::from_pem_slice(&pem)
+        .map_err(|error| anyhow::anyhow!("decode DKIM PEM key for {domain}: {error}"))?;
+    let key = RsaKey::<Sha256>::from_key_der(private_key)
         .map_err(|error| anyhow::anyhow!("parse DKIM RSA key for {domain}: {error}"))?;
 
     let signature = DkimSigner::from_key(key)
