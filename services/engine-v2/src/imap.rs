@@ -265,7 +265,7 @@ fn render_rfc822(message: &StoredMessage) -> String {
         message.sender,
         message.recipients.join(", "),
         message.cc.join(", "),
-        message.subject.replace('\r', " ").replace('\n', " "),
+        message.subject.replace(['\r', '\n'], " "),
         message.received_at.to_rfc2822(),
         message.id,
         message.body
