@@ -2,9 +2,10 @@ use anyhow::{Result, anyhow};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use sqlx::PgPool;
 use tokio::{
-    io::{AsyncBufRead, AsyncBufReadExt, AsyncWriteExt, BufReader},
+    io::{AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader},
     net::{TcpListener, TcpStream},
 };
+use tokio_rustls::TlsAcceptor;
 use tracing::{info, warn};
 
 use crate::db;
@@ -20,7 +21,6 @@ struct SessionState {
 pub async fn serve(addr: &str, pool: PgPool) -> Result<()> {
     let listener = TcpListener::bind(addr).await?;
     info!(%addr, "Tuku Engine v2 SMTP listener ready");
-
     loop {
         let (stream, peer) = listener.accept().await?;
         let pool = pool.clone();
@@ -32,8 +32,31 @@ pub async fn serve(addr: &str, pool: PgPool) -> Result<()> {
     }
 }
 
-async fn handle(stream: TcpStream, pool: PgPool) -> Result<()> {
-    let (read, mut write) = stream.into_split();
+pub async fn serve_tls(addr: &str, pool: PgPool, acceptor: TlsAcceptor) -> Result<()> {
+    let listener = TcpListener::bind(addr).await?;
+    info!(%addr, "Tuku Engine v2 SMTPS listener ready");
+    loop {
+        let (stream, peer) = listener.accept().await?;
+        let pool = pool.clone();
+        let acceptor = acceptor.clone();
+        tokio::spawn(async move {
+            match acceptor.accept(stream).await {
+                Ok(tls) => {
+                    if let Err(error) = handle(tls, pool).await {
+                        warn!(%peer, %error, "SMTPS session failed");
+                    }
+                }
+                Err(error) => warn!(%peer, %error, "SMTPS handshake failed"),
+            }
+        });
+    }
+}
+
+async fn handle<S>(stream: S, pool: PgPool) -> Result<()>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    let (read, mut write) = tokio::io::split(stream);
     let mut reader = BufReader::new(read);
     write
         .write_all(b"220 Tuku Engine v2 ESMTP ready\r\n")
@@ -102,11 +125,7 @@ async fn handle(stream: TcpStream, pool: PgPool) -> Result<()> {
                     state.recipients.clear();
                     write.write_all(b"250 2.1.0 Sender OK\r\n").await?;
                 }
-                Err(_) => {
-                    write
-                        .write_all(b"501 5.1.7 Bad sender address\r\n")
-                        .await?
-                }
+                Err(_) => write.write_all(b"501 5.1.7 Bad sender address\r\n").await?,
             }
         } else if upper.starts_with("RCPT TO:") {
             let raw = command["RCPT TO:".len()..]
@@ -124,11 +143,7 @@ async fn handle(stream: TcpStream, pool: PgPool) -> Result<()> {
                         write.write_all(b"550 5.7.1 Relaying denied\r\n").await?;
                     }
                 }
-                Err(_) => {
-                    write
-                        .write_all(b"501 5.1.3 Bad recipient address\r\n")
-                        .await?
-                }
+                Err(_) => write.write_all(b"501 5.1.3 Bad recipient address\r\n").await?,
             }
         } else if upper == "DATA" {
             let Some(mail_from) = state.mail_from.clone() else {
@@ -146,17 +161,7 @@ async fn handle(stream: TcpStream, pool: PgPool) -> Result<()> {
                 .await?;
 
             let raw = read_data(&mut reader).await?;
-            let (subject, body) = parse_message(&raw);
-
-            match db::accept_smtp_message(
-                &pool,
-                &mail_from,
-                &state.recipients,
-                &subject,
-                &body,
-            )
-            .await
-            {
+            match db::accept_submission(&pool, &mail_from, &state.recipients, &raw).await {
                 Ok(_) => {
                     write.write_all(b"250 2.0.0 Message accepted\r\n").await?;
                     state.mail_from = None;
@@ -180,11 +185,11 @@ async fn handle(stream: TcpStream, pool: PgPool) -> Result<()> {
     }
 }
 
-async fn authenticate_plain(
+async fn authenticate_plain<W: AsyncWrite + Unpin>(
     pool: &PgPool,
     payload: &str,
     state: &mut SessionState,
-    write: &mut tokio::net::tcp::OwnedWriteHalf,
+    write: &mut W,
 ) -> Result<()> {
     let decoded = STANDARD
         .decode(payload)
@@ -215,24 +220,24 @@ async fn authenticate_plain(
     Ok(())
 }
 
-async fn read_data<R: AsyncBufRead + Unpin>(reader: &mut R) -> Result<String> {
-    let mut out = String::new();
-    let mut line = String::new();
+async fn read_data<R: AsyncBufRead + Unpin>(reader: &mut R) -> Result<Vec<u8>> {
+    let mut out = Vec::new();
+    let mut line = Vec::new();
 
     loop {
         line.clear();
-        if reader.read_line(&mut line).await? == 0 {
+        if reader.read_until(b'\n', &mut line).await? == 0 {
             break;
         }
 
-        if line == ".\r\n" || line == ".\n" {
+        if line == b".\r\n" || line == b".\n" {
             break;
         }
 
-        if line.starts_with("..") {
-            out.push_str(&line[1..]);
+        if line.starts_with(b"..") {
+            out.extend_from_slice(&line[1..]);
         } else {
-            out.push_str(&line);
+            out.extend_from_slice(&line);
         }
 
         if out.len() > 52_428_800 {
@@ -243,45 +248,15 @@ async fn read_data<R: AsyncBufRead + Unpin>(reader: &mut R) -> Result<String> {
     Ok(out)
 }
 
-fn parse_message(raw: &str) -> (String, String) {
-    let normalised = raw.replace("\r\n", "\n");
-    let (head, body) = normalised
-        .split_once("\n\n")
-        .unwrap_or(("", &normalised));
-
-    let mut subject = String::new();
-    let mut current = String::new();
-
-    for line in head.lines() {
-        if (line.starts_with(' ') || line.starts_with('\t')) && !current.is_empty() {
-            current.push(' ');
-            current.push_str(line.trim());
-            continue;
-        }
-
-        if !current.is_empty() && current.to_ascii_lowercase().starts_with("subject:") {
-            subject = current[8..].trim().to_string();
-        }
-
-        current = line.to_string();
-    }
-
-    if !current.is_empty() && current.to_ascii_lowercase().starts_with("subject:") {
-        subject = current[8..].trim().to_string();
-    }
-
-    (subject, body.to_string())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn extracts_subject_and_body() {
-        let (subject, body) =
-            parse_message("From: a@example.com\r\nSubject: Hello\r\n\r\nWorld\r\n");
-        assert_eq!(subject, "Hello");
-        assert!(body.contains("World"));
+    #[tokio::test]
+    async fn data_reader_preserves_non_utf8_mime_bytes() {
+        let data = b"Subject: bin\r\n\r\n\xff\xfe\r\n.\r\n";
+        let mut reader = BufReader::new(&data[..]);
+        let out = read_data(&mut reader).await.unwrap();
+        assert!(out.ends_with(b"\xff\xfe\r\n"));
     }
 }
