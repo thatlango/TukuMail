@@ -33,6 +33,47 @@ jobs:
           name: tuku-engine-v2-linux-x86_64
           path: services/engine-v2/target/release/tuku-engine-v2
 
+
+  engine-v2-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16.9-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: enginev2
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d enginev2"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: services/engine-v2
+      - run: cargo build --release --manifest-path services/engine-v2/Cargo.toml
+      - name: Start Tuku Engine v2
+        env:
+          ENGINE_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/enginev2
+          ENGINE_ADMIN_KEY: ci-engine-v2-key-at-least-24-chars
+          ENGINE_HTTP_ADDR: 127.0.0.1:8088
+          ENGINE_SMTP_ADDR: 127.0.0.1:2525
+          ENGINE_IMAP_ADDR: 127.0.0.1:2143
+          RUST_LOG: tuku_engine_v2=info
+        run: |
+          services/engine-v2/target/release/tuku-engine-v2 >/tmp/tuku-engine-v2.log 2>&1 &
+          echo $! >/tmp/tuku-engine-v2.pid
+      - name: Protocol smoke
+        env:
+          ENGINE_ADMIN_KEY: ci-engine-v2-key-at-least-24-chars
+        run: python3 scripts/smoke-engine-v2.py || (cat /tmp/tuku-engine-v2.log && exit 1)
+      - if: always()
+        run: cat /tmp/tuku-engine-v2.log
+
   web:
     runs-on: ubuntu-latest
     steps:
