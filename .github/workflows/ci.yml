@@ -56,6 +56,12 @@ jobs:
         with:
           workspaces: services/engine-v2
       - run: cargo build --release --manifest-path services/engine-v2/Cargo.toml
+      - name: Generate ephemeral TLS certificate
+        run: |
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+            -keyout /tmp/engine-v2-key.pem \
+            -out /tmp/engine-v2-cert.pem \
+            -subj "/CN=localhost" >/dev/null 2>&1
       - name: Start Tuku Engine v2
         env:
           ENGINE_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/enginev2
@@ -63,14 +69,28 @@ jobs:
           ENGINE_HTTP_ADDR: 127.0.0.1:8088
           ENGINE_SMTP_ADDR: 127.0.0.1:2525
           ENGINE_IMAP_ADDR: 127.0.0.1:2143
+          ENGINE_TLS_CERT: /tmp/engine-v2-cert.pem
+          ENGINE_TLS_KEY: /tmp/engine-v2-key.pem
+          ENGINE_SMTPS_ADDR: 127.0.0.1:2465
+          ENGINE_IMAPS_ADDR: 127.0.0.1:2993
           RUST_LOG: tuku_engine_v2=info
         run: |
           services/engine-v2/target/release/tuku-engine-v2 >/tmp/tuku-engine-v2.log 2>&1 &
           echo $! >/tmp/tuku-engine-v2.pid
-      - name: Protocol smoke
+      - name: Protocol and MIME smoke
         env:
           ENGINE_ADMIN_KEY: ci-engine-v2-key-at-least-24-chars
         run: python3 scripts/smoke-engine-v2.py || (cat /tmp/tuku-engine-v2.log && exit 1)
+      - name: Verify implicit TLS listeners
+        run: |
+          timeout 8 bash -c 'printf "QUIT\r\n" | openssl s_client -quiet -connect 127.0.0.1:2465 -servername localhost 2>/dev/null' | grep "220 Tuku Engine v2"
+          timeout 8 bash -c 'printf "a1 LOGOUT\r\n" | openssl s_client -quiet -connect 127.0.0.1:2993 -servername localhost 2>/dev/null' | grep "IMAP4rev1 ready"
+      - name: Verify raw MIME persisted in outbound queue
+        env:
+          PGPASSWORD: postgres
+        run: |
+          count=$(psql -h 127.0.0.1 -U postgres -d enginev2 -Atc "SELECT count(*) FROM engine_v2_outgoing_queue WHERE raw_message IS NOT NULL")
+          test "$count" -ge 2
       - if: always()
         run: cat /tmp/tuku-engine-v2.log
 
