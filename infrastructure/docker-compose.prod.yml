@@ -54,6 +54,32 @@ services:
         aliases:
           - ${TUKUMAIL_HOSTNAME:?set TUKUMAIL_HOSTNAME}
 
+  engine-v2:
+    build:
+      context: ..
+      dockerfile: services/engine-v2/Dockerfile
+    restart: unless-stopped
+    environment:
+      ENGINE_DATABASE_URL: postgres://${POSTGRES_USER:-james}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/${CONTROL_DATABASE:-tukumail}
+      ENGINE_ADMIN_KEY: ${TUKUMAIL_ENGINE_V2_KEY:?set TUKUMAIL_ENGINE_V2_KEY}
+      ENGINE_HTTP_ADDR: 0.0.0.0:8088
+      ENGINE_SMTP_ADDR: 0.0.0.0:2525
+      ENGINE_IMAP_ADDR: 0.0.0.0:2143
+      ENGINE_RELAY_HOST: ${TUKUMAIL_ENGINE_V2_RELAY_HOST:-}
+      ENGINE_RELAY_PORT: ${TUKUMAIL_ENGINE_V2_RELAY_PORT:-587}
+      ENGINE_RELAY_USERNAME: ${TUKUMAIL_ENGINE_V2_RELAY_USERNAME:-}
+      ENGINE_RELAY_PASSWORD: ${TUKUMAIL_ENGINE_V2_RELAY_PASSWORD:-}
+      RUST_LOG: ${TUKUMAIL_ENGINE_V2_LOG:-tuku_engine_v2=info}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${TUKUMAIL_ENGINE_V2_SMTP_PORT:-2525}:2525"
+      - "127.0.0.1:${TUKUMAIL_ENGINE_V2_IMAP_PORT:-2143}:2143"
+    expose:
+      - "8088"
+    mem_limit: 768m
+
   api:
     build:
       context: ..
@@ -65,6 +91,9 @@ services:
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
       TUKUMAIL_PROVISIONING_KEY: ${TUKUMAIL_PROVISIONING_KEY:?set TUKUMAIL_PROVISIONING_KEY}
       TUKUMAIL_CORS_ORIGIN: https://${TUKUMAIL_HOSTNAME:?set TUKUMAIL_HOSTNAME}
+      TUKUMAIL_ENGINE_PROVIDER: ${TUKUMAIL_ENGINE_PROVIDER:-james}
+      TUKUMAIL_ENGINE_V2_ENDPOINT: http://engine-v2:8088
+      TUKUMAIL_ENGINE_V2_KEY: ${TUKUMAIL_ENGINE_V2_KEY:?set TUKUMAIL_ENGINE_V2_KEY}
       TUKUMAIL_JAMES_WEBADMIN: http://mail-engine:8000
       TUKUMAIL_IMAP_HOST: ${TUKUMAIL_HOSTNAME:?set TUKUMAIL_HOSTNAME}
       TUKUMAIL_IMAP_PORT: 993
@@ -78,6 +107,8 @@ services:
       postgres:
         condition: service_healthy
       mail-engine:
+        condition: service_started
+      engine-v2:
         condition: service_started
     networks:
       default:
