@@ -41,6 +41,13 @@ pub struct SendRequest {
     pub text_body: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RawSendRequest {
+    pub recipients: Vec<String>,
+    pub raw_base64: String,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MessageSummary {
@@ -74,6 +81,7 @@ pub struct StoredMessage {
     pub cc: Vec<String>,
     pub subject: String,
     pub body: String,
+    pub raw_message: Option<Vec<u8>>,
     pub received_at: DateTime<Utc>,
     pub seen: bool,
 }
@@ -86,5 +94,6 @@ pub struct QueueItem {
     pub cc: Vec<String>,
     pub subject: String,
     pub body: String,
+    pub raw_message: Option<Vec<u8>>,
     pub attempts: i32,
 }
