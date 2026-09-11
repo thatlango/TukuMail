@@ -136,6 +136,10 @@ impl Config {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    tokio_rustls::rustls::crypto::aws_lc_rs::default_provider()
+        .install_default()
+        .map_err(|_| anyhow::anyhow!("rustls crypto provider already installed with a different configuration"))?;
+
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::try_from_default_env().unwrap_or_else(|_| "tuku_engine_v2=info".into()),
