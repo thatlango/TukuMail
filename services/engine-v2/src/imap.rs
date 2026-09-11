@@ -2,7 +2,7 @@ use anyhow::Result;
 use sqlx::PgPool;
 use tokio::{
     io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader},
-    net::{TcpListener, TcpStream},
+    net::TcpListener,
 };
 use tokio_rustls::TlsAcceptor;
 use tracing::{info, warn};
