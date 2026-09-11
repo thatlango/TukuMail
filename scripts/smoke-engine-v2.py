@@ -65,25 +65,7 @@ assert status == 204
 status, auth = call("POST", "/v1/auth", {"address": ADDRESS, "password": PASSWORD})
 assert status == 200 and auth["authenticated"] is True
 
-# Internet-style inbound SMTP to a local mailbox requires no auth.
-responses = smtp_dialog([
-    "EHLO ci.example",
-    "MAIL FROM:<sender@outside.test>",
-    "RCPT TO:<" + ADDRESS + ">",
-    "DATA",
-    "Subject: Engine v2 protocol smoke",
-    "",
-    "hello from smtp",
-    ".",
-    "QUIT",
-])
-assert responses[0].startswith("250"), responses
-assert responses[1].startswith("250"), responses
-assert responses[2].startswith("250"), responses
-assert responses[3].startswith("354"), responses
-# DATA helper treats each line as a command, so run DATA body in a dedicated socket below.
-
-# Proper DATA transaction.
+# Internet-style inbound SMTP to a local mailbox requires no auth.\n# Proper DATA transaction.
 with socket.create_connection(("127.0.0.1", 2525), timeout=5) as sock:
     f = sock.makefile("rwb", buffering=0)
     assert f.readline().startswith(b"220")
