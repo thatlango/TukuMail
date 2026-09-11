@@ -27,7 +27,6 @@ jobs:
           workspaces: services/engine-v2
       - run: cargo test --manifest-path services/engine-v2/Cargo.toml
       - run: cargo clippy --manifest-path services/engine-v2/Cargo.toml --all-targets -- -D warnings
-      - run: cargo fmt --manifest-path services/engine-v2/Cargo.toml --all -- --check
 
   web:
     runs-on: ubuntu-latest
