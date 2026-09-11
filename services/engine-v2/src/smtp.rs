@@ -3,7 +3,7 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use sqlx::PgPool;
 use tokio::{
     io::{AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader},
-    net::{TcpListener, TcpStream},
+    net::TcpListener,
 };
 use tokio_rustls::TlsAcceptor;
 use tracing::{info, warn};
