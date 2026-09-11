@@ -22,8 +22,11 @@ tukumail:
   provisioning-key: ${TUKUMAIL_PROVISIONING_KEY:dev-only-change-me}
   cors-origin: ${TUKUMAIL_CORS_ORIGIN:http://localhost:5173}
   engine:
+    provider: ${TUKUMAIL_ENGINE_PROVIDER:james}
     webadmin: ${TUKUMAIL_JAMES_WEBADMIN:http://localhost:8000}
     imap-host: ${TUKUMAIL_IMAP_HOST:localhost}
     imap-port: ${TUKUMAIL_IMAP_PORT:993}
     smtp-host: ${TUKUMAIL_SMTP_HOST:localhost}
     smtp-port: ${TUKUMAIL_SMTP_PORT:465}
+    v2-endpoint: ${TUKUMAIL_ENGINE_V2_ENDPOINT:http://localhost:8088}
+    v2-key: ${TUKUMAIL_ENGINE_V2_KEY:dev-only-change-me-engine-v2}
