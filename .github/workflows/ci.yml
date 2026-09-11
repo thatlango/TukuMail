@@ -17,6 +17,18 @@ jobs:
           java-version: '21'
       - run: mvn -B -f services/pom.xml test
 
+  engine-v2:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: services/engine-v2
+      - run: cargo fmt --manifest-path services/engine-v2/Cargo.toml --all -- --check
+      - run: cargo test --manifest-path services/engine-v2/Cargo.toml
+      - run: cargo clippy --manifest-path services/engine-v2/Cargo.toml --all-targets -- -D warnings
+
   web:
     runs-on: ubuntu-latest
     steps:
@@ -61,3 +73,4 @@ jobs:
       - uses: actions/checkout@v4
       - run: bash scripts/validate-prod.sh
       - run: docker build -f infrastructure/james/Dockerfile -t tukumail-james-ci .
+      - run: docker build -f services/engine-v2/Dockerfile -t tuku-engine-v2-ci .
