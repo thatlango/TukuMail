@@ -201,17 +201,15 @@ pub async fn accept_submission(
 
     for recipient in recipients {
         if let Some(local) = resolve_local(pool, recipient).await? {
-            store_message(
-                pool,
-                &local,
-                &sender,
+            let input = StoredInput {
+                sender: &sender,
                 recipients,
-                &projection.cc,
-                &projection.subject,
-                &projection.body,
+                cc: &projection.cc,
+                subject: &projection.subject,
+                body: &projection.body,
                 raw_message,
-            )
-            .await?;
+            };
+            store_message(pool, &local, &input).await?;
             local_count += 1;
         } else {
             remote.push(normalise_address(recipient)?);
@@ -267,16 +265,16 @@ async fn resolve_local(pool: &PgPool, raw: &str) -> Result<Option<String>> {
     Ok(alias)
 }
 
-async fn store_message(
-    pool: &PgPool,
-    mailbox: &str,
-    sender: &str,
-    recipients: &[String],
-    cc: &[String],
-    subject: &str,
-    body: &str,
-    raw_message: &[u8],
-) -> Result<()> {
+struct StoredInput<'a> {
+    sender: &'a str,
+    recipients: &'a [String],
+    cc: &'a [String],
+    subject: &'a str,
+    body: &'a str,
+    raw_message: &'a [u8],
+}
+
+async fn store_message(pool: &PgPool, mailbox: &str, input: &StoredInput<'_>) -> Result<()> {
     let quota: i64 = sqlx::query_scalar(
         "SELECT quota_bytes FROM engine_v2_mailboxes WHERE address=$1 AND suspended=FALSE",
     )
@@ -291,7 +289,7 @@ async fn store_message(
     .fetch_one(pool)
     .await?;
 
-    let size = raw_message.len() as i64;
+    let size = input.raw_message.len() as i64;
     if quota > 0 && used.saturating_add(size) > quota {
         bail!("mailbox quota exceeded");
     }
@@ -303,13 +301,13 @@ async fn store_message(
     )
     .bind(Uuid::new_v4())
     .bind(mailbox)
-    .bind(sender)
-    .bind(recipients)
-    .bind(cc)
-    .bind(subject)
-    .bind(body)
+    .bind(input.sender)
+    .bind(input.recipients)
+    .bind(input.cc)
+    .bind(input.subject)
+    .bind(input.body)
     .bind(size)
-    .bind(raw_message)
+    .bind(input.raw_message)
     .execute(pool)
     .await?;
     Ok(())
