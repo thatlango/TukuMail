@@ -2,7 +2,10 @@ use std::{fs, path::Path};
 
 use anyhow::{Context, Result, bail};
 use mail_auth::{
-    common::crypto::{RsaKey, Sha256},
+    common::{
+        crypto::{RsaKey, Sha256},
+        headers::HeaderWriter,
+    },
     dkim::DkimSigner,
 };
 use rustls_pki_types::{PrivateKeyDer, pem::PemObject};
