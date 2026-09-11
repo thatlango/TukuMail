@@ -1,9 +1,10 @@
 use anyhow::Result;
 use sqlx::PgPool;
 use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+    io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader},
     net::{TcpListener, TcpStream},
 };
+use tokio_rustls::TlsAcceptor;
 use tracing::{info, warn};
 
 use crate::{db, model::StoredMessage};
@@ -11,7 +12,6 @@ use crate::{db, model::StoredMessage};
 pub async fn serve(addr: &str, pool: PgPool) -> Result<()> {
     let listener = TcpListener::bind(addr).await?;
     info!(%addr, "Tuku Engine v2 IMAP listener ready");
-
     loop {
         let (stream, peer) = listener.accept().await?;
         let pool = pool.clone();
@@ -23,8 +23,31 @@ pub async fn serve(addr: &str, pool: PgPool) -> Result<()> {
     }
 }
 
-async fn handle(stream: TcpStream, pool: PgPool) -> Result<()> {
-    let (read, mut write) = stream.into_split();
+pub async fn serve_tls(addr: &str, pool: PgPool, acceptor: TlsAcceptor) -> Result<()> {
+    let listener = TcpListener::bind(addr).await?;
+    info!(%addr, "Tuku Engine v2 IMAPS listener ready");
+    loop {
+        let (stream, peer) = listener.accept().await?;
+        let pool = pool.clone();
+        let acceptor = acceptor.clone();
+        tokio::spawn(async move {
+            match acceptor.accept(stream).await {
+                Ok(tls) => {
+                    if let Err(error) = handle(tls, pool).await {
+                        warn!(%peer, %error, "IMAPS session failed");
+                    }
+                }
+                Err(error) => warn!(%peer, %error, "IMAPS handshake failed"),
+            }
+        });
+    }
+}
+
+async fn handle<S>(stream: S, pool: PgPool) -> Result<()>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    let (read, mut write) = tokio::io::split(stream);
     let mut reader = BufReader::new(read);
     write
         .write_all(b"* OK Tuku Engine v2 IMAP4rev1 ready\r\n")
@@ -91,13 +114,7 @@ async fn handle(stream: TcpStream, pool: PgPool) -> Result<()> {
                 };
 
                 if !args.trim_matches('"').eq_ignore_ascii_case("INBOX") {
-                    tagged(
-                        &mut write,
-                        tag,
-                        "NO",
-                        "Only INBOX is available in v2 pilot",
-                    )
-                    .await?;
+                    tagged(&mut write, tag, "NO", "Only INBOX is available in v2 pilot").await?;
                     continue;
                 }
 
@@ -215,8 +232,8 @@ async fn handle(stream: TcpStream, pool: PgPool) -> Result<()> {
     }
 }
 
-async fn emit_fetch(
-    write: &mut tokio::net::tcp::OwnedWriteHalf,
+async fn emit_fetch<W: AsyncWrite + Unpin>(
+    write: &mut W,
     messages: &[StoredMessage],
     set: &str,
     by_uid: bool,
@@ -239,27 +256,30 @@ async fn emit_fetch(
 
         let raw = render_rfc822(message);
         let flags = if message.seen { "\\Seen" } else { "" };
+        let prefix = format!(
+            "* {} FETCH (UID {} FLAGS ({}) RFC822.SIZE {} BODY[] {{{}}}\r\n",
+            sequence,
+            message.uid,
+            flags,
+            raw.len(),
+            raw.len(),
+        );
 
-        write
-            .write_all(
-                format!(
-                    "* {} FETCH (UID {} FLAGS ({}) RFC822.SIZE {} BODY[] {{{}}}\r\n{}\r\n)\r\n",
-                    sequence,
-                    message.uid,
-                    flags,
-                    raw.len(),
-                    raw.len(),
-                    raw
-                )
-                .as_bytes(),
-            )
-            .await?;
+        write.write_all(prefix.as_bytes()).await?;
+        write.write_all(&raw).await?;
+        write.write_all(b"\r\n)\r\n").await?;
     }
 
     Ok(())
 }
 
-fn render_rfc822(message: &StoredMessage) -> String {
+fn render_rfc822(message: &StoredMessage) -> Vec<u8> {
+    if let Some(raw) = message.raw_message.as_ref()
+        && !raw.is_empty()
+    {
+        return raw.clone();
+    }
+
     format!(
         "From: {}\r\nTo: {}\r\nCc: {}\r\nSubject: {}\r\nDate: {}\r\nMessage-ID: <{}@tuku-engine-v2>\r\n\r\n{}",
         message.sender,
@@ -270,6 +290,7 @@ fn render_rfc822(message: &StoredMessage) -> String {
         message.id,
         message.body
     )
+    .into_bytes()
 }
 
 fn in_set(value: usize, set: &str, max: usize) -> bool {
@@ -327,8 +348,8 @@ fn quoted_tokens(input: &str) -> Vec<String> {
     out
 }
 
-async fn tagged(
-    write: &mut tokio::net::tcp::OwnedWriteHalf,
+async fn tagged<W: AsyncWrite + Unpin>(
+    write: &mut W,
     tag: &str,
     status: &str,
     text: &str,
@@ -356,5 +377,22 @@ mod tests {
         assert!(in_set(3, "1:4", 10));
         assert!(in_set(10, "*", 10));
         assert!(!in_set(7, "1:4", 10));
+    }
+
+    #[test]
+    fn raw_mime_is_preferred_for_imap() {
+        let message = StoredMessage {
+            uid: 1,
+            id: uuid::Uuid::nil(),
+            sender: "a@example.com".into(),
+            recipients: vec!["b@example.com".into()],
+            cc: vec![],
+            subject: "ignored".into(),
+            body: "ignored".into(),
+            raw_message: Some(b"Subject: exact\r\n\r\nbody".to_vec()),
+            received_at: chrono::Utc::now(),
+            seen: false,
+        };
+        assert_eq!(render_rfc822(&message), b"Subject: exact\r\n\r\nbody");
     }
 }
