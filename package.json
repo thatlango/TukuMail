@@ -1,0 +1,12 @@
+{
+  "name": "tukumail",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start:api": "node services/api/src/server.js",
+    "test": "node --test tests/*.test.js",
+    "verify": "npm test && node scripts/verify-structure.js"
+  },
+  "engines": { "node": ">=22" }
+}
