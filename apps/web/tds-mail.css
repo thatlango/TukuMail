@@ -1,0 +1,11 @@
+[data-product="tukumail"]{
+  font-family:var(--font-sans);color:var(--foreground);background:var(--background);
+}
+[data-product="tukumail"] .shell{background:var(--background)}
+[data-product="tukumail"] aside{background:var(--brand-navy);color:var(--brand-on-dark)}
+[data-product="tukumail"] main{background:var(--background)}
+[data-product="tukumail"] .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-e1)}
+[data-product="tukumail"] .muted{color:var(--foreground-secondary)}
+[data-product="tukumail"] .pill{background:var(--primary-soft);color:var(--primary);border-radius:var(--radius-full)}
+[data-product="tukumail"] :where(button,a,input,select,textarea){min-height:44px}
+@media(pointer:coarse){[data-product="tukumail"] :where(button,a,input,select,textarea){min-height:48px}}
